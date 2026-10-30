@@ -1,0 +1,87 @@
+import { Router } from 'express';
+import {
+  LedgerController,
+  createJournalEntrySchema,
+  submitExpenseSchema,
+  requestCorrectionSchema,
+  rejectExpenseSchema,
+  resubmitExpenseSchema,
+} from '../controllers/ledgerController.js';
+import { validate } from '../middleware/validate.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
+import { requireClubTenant, authorizeRole } from '../middleware/rbac.js';
+
+const router = Router();
+
+router.use(requireClubTenant);
+
+// General Ledger & Accounts
+router.get('/accounts', authenticate, LedgerController.getAccounts);
+router.get('/journal-entries', authenticate, authorizeRole(['TREASURER', 'ASSOCIATION_INCHARGE', 'ADMIN']), LedgerController.getJournalEntries);
+router.post(
+  '/journal-entries',
+  authenticate,
+  authorizeRole(['TREASURER', 'ADMIN']),
+  validate({ body: createJournalEntrySchema }),
+  LedgerController.createJournalEntry
+);
+
+// Budgets & Treasurer Reporting
+router.get('/budgets', optionalAuth, LedgerController.getBudgets);
+router.get('/treasurer/summary', authenticate, authorizeRole(['TREASURER', 'ASSOCIATION_INCHARGE', 'ADMIN']), LedgerController.getTreasurerSummary);
+
+// Expense Reimbursement Workflow
+router.get('/expenses', optionalAuth, LedgerController.getExpenses);
+router.get('/expenses/:id', optionalAuth, LedgerController.getExpenseDetails);
+router.post(
+  '/expenses',
+  authenticate,
+  validate({ body: submitExpenseSchema }),
+  LedgerController.submitExpense
+);
+router.post(
+  '/expenses/:id/review',
+  authenticate,
+  authorizeRole(['TREASURER', 'ASSOCIATION_INCHARGE', 'ADMIN']),
+  LedgerController.reviewExpense
+);
+router.post(
+  '/expenses/:id/request-correction',
+  authenticate,
+  authorizeRole(['TREASURER', 'ASSOCIATION_INCHARGE', 'ADMIN']),
+  validate({ body: requestCorrectionSchema }),
+  LedgerController.requestCorrection
+);
+router.put(
+  '/expenses/:id/resubmit',
+  authenticate,
+  validate({ body: resubmitExpenseSchema }),
+  LedgerController.resubmitExpense
+);
+router.post(
+  '/expenses/:id/reject',
+  authenticate,
+  authorizeRole(['TREASURER', 'ASSOCIATION_INCHARGE', 'ADMIN']),
+  validate({ body: rejectExpenseSchema }),
+  LedgerController.rejectExpense
+);
+router.post(
+  '/expenses/:id/approve-treasurer',
+  authenticate,
+  authorizeRole(['TREASURER', 'ADMIN']),
+  LedgerController.approveByTreasurer
+);
+router.post(
+  ['/expenses/:id/approve-incharge', '/expenses/:id/approve-president'],
+  authenticate,
+  authorizeRole(['ASSOCIATION_INCHARGE', 'ADMIN']),
+  LedgerController.approveByPresident
+);
+router.post(
+  '/expenses/:id/disburse',
+  authenticate,
+  authorizeRole(['TREASURER', 'ADMIN']),
+  LedgerController.disburseExpense
+);
+
+export default router;
